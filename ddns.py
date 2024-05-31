@@ -1,10 +1,12 @@
 
 """updating IP of dns entry when it has changed"""
 
+import logging
 import os
 import sys
 import requests
-from cloudflare import Cloudflare, CloudflareError
+from cloudflare import Cloudflare, APIError
+from systemd.journal import JournalHandler
 
 
 ZONE_ID = os.environ.get("CLOUDFLARE_ZONE_ID")
@@ -18,6 +20,9 @@ client = Cloudflare(
     api_token=os.environ.get("CLOUDFLARE_API_TOKEN"),
 )
 
+log = logging.getLogger('cloudflare_ddns_updater')
+log.addHandler(JournalHandler())
+log.setLevel(logging.INFO)
 
 try:
     # requesting old ip
@@ -29,14 +34,14 @@ try:
     elif old_ip_response.type == 'AAAA':
         new_ip_response = requests.get('https://api64.ipify.org', timeout=REQUEST_TIMEOUT_S)
     else:
-        sys.stderr.write(f"IP type {old_ip_response.type} unknown\n")
+        log.error("IP type %s unknown", old_ip_response.type)
         sys.exit(1)
 
     new_ip = new_ip_response.text
 
     # check if the old ip is different to the new ip and edit the dns record accordingly
     if old_ip_response.content != new_ip:
-        print(f"setting new IP: {old_ip_response.content} --> {new_ip}")
+        log.info('setting new IP: %s --> %s', old_ip_response.content, new_ip)
         client.dns.records.edit(
             dns_record_id=DNS_RECORD_ID,
             zone_id=ZONE_ID,
@@ -44,10 +49,10 @@ try:
             name=old_ip_response.name,
             type=old_ip_response.type)
     else:
-        print("IP not changed")
+        log.info('IP not changed')
 
-except CloudflareError as e:
-    sys.stderr.write('api error\n')
+except APIError as e:
+    log.error('api error: %d', e.message)
     sys.exit(e)
 
 else:

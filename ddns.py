@@ -1,5 +1,5 @@
 
-"""updating IP v4 and v6 of dns entry when they have changed"""
+"""updating IP of dns entry when it has changed"""
 
 import os
 import sys
@@ -8,9 +8,8 @@ from cloudflare import Cloudflare, CloudflareError
 
 
 ZONE_ID = os.environ.get("CLOUDFLARE_ZONE_ID")
-DNS_RECORD_ID_IPV4 =os.environ.get("CLOUDFLARE_DNS_RECORD_ID_IPV4")
-DNS_RECORD_ID_IPV6 = os.environ.get("CLOUDFLARE_DNS_RECORD_ID_IPV6")
-REQUEST_TIMEOUT_DURATION_S = 20
+DNS_RECORD_ID =os.environ.get("CLOUDFLARE_DNS_RECORD_ID")
+REQUEST_TIMEOUT_S = 20
 
 
 client = Cloudflare(
@@ -21,41 +20,35 @@ client = Cloudflare(
 
 
 try:
-    old_ipv4 = client.dns.records.get(dns_record_id=DNS_RECORD_ID_IPV4, zone_id=ZONE_ID)
-    old_ipv6 = client.dns.records.get(dns_record_id=DNS_RECORD_ID_IPV6, zone_id=ZONE_ID)
+    # requesting old ip
+    old_ip = client.dns.records.get(dns_record_id=DNS_RECORD_ID, zone_id=ZONE_ID)
 
-    print(old_ipv4.content)
-    print(old_ipv6.content)
-
-    new_ipv4_response = requests.get('https://api.ipify.org', timeout=REQUEST_TIMEOUT_DURATION_S)
-    new_ipv6_response = requests.get('https://api64.ipify.org', timeout=REQUEST_TIMEOUT_DURATION_S)
-
-    new_ipv4 = new_ipv4_response.text
-    new_ipv6 = new_ipv6_response.text
-
-    if old_ipv4 != new_ipv4:
-        print(f"setting new IP v4: {old_ipv4} --> {new_ipv4}")
-        client.dns.records.edit(
-            dns_record_id=DNS_RECORD_ID_IPV4,
-            zone_id=ZONE_ID,
-            content=new_ipv4,
-            name=old_ipv4.name,
-            type=old_ipv4.type)
+    # requesting new ip
+    if old_ip.type == 'A':
+        new_ip_response = requests.get('https://api.ipify.org', timeout=REQUEST_TIMEOUT_S)
+    elif old_ip.type == 'AAAA':
+        new_ip_response = requests.get('https://api64.ipify.org', timeout=REQUEST_TIMEOUT_S)
     else:
-        print("IP v4 not changed")
+        sys.stderr.write(f"IP type {old_ip.type} unknown\n")
+        sys.exit(1)
 
-    if old_ipv6 != new_ipv6:
-        print(f"setting new IP v6: {old_ipv6} --> {new_ipv6}")
+    new_ip = new_ip_response.text
+
+    # check if the old ip is different to the new ip and edit the dns record accordingly
+    if old_ip != new_ip:
+        print(f"setting new IP: {old_ip} --> {new_ip}")
         client.dns.records.edit(
-            dns_record_id=DNS_RECORD_ID_IPV6,
+            dns_record_id=DNS_RECORD_ID,
             zone_id=ZONE_ID,
-            content=new_ipv6,
-            name=old_ipv6.name,
-            type=old_ipv6.type)
+            content=new_ip,
+            name=old_ip.name,
+            type=old_ip.type)
     else:
-        print("IP v6 not changed")
+        print("IP not changed")
+
 except CloudflareError as e:
     sys.stderr.write('api error\n')
     sys.exit(e)
+
 else:
     sys.exit(0)

@@ -1,0 +1,9 @@
+[Unit]
+Description=ddns entry updater for IP %i
+
+[Timer]
+OnCalendar=*-*-* *:01:42
+# depends on sysdtimer.service
+
+[Install]
+WantedBy=timers.target

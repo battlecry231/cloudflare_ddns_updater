@@ -1,0 +1,11 @@
+[Unit]
+Description=ddns - updating dns entry to current ip
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/python3.12 /home/ubuntu/scripts/cloudflare_ddns_updater/main.py
+EnvironmentFile=/home/ubuntu/secrets/ddns%i.conf
+User=ubuntu
+
+[Install]
+WantedBy=multi-user.target

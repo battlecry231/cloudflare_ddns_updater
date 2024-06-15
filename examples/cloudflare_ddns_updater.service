@@ -5,6 +5,7 @@ Description=ddns - updating dns entry to current ip
 Type=oneshot
 ExecStart=/usr/local/bin/python3.12 /home/ubuntu/scripts/cloudflare_ddns_updater/main.py
 EnvironmentFile=/home/ubuntu/secrets/ddns%i.conf
+EnvironmentFile=/home/ubuntu/secrets/fritzbox.conf
 User=ubuntu
 
 [Install]

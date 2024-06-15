@@ -4,20 +4,20 @@
 import logging
 import os
 import sys
-import requests
 from cloudflare import Cloudflare, APIError
 from systemd.journal import JournalHandler
+from fritzconnection.lib.fritzstatus import FritzStatus
+import netifaces
 
 
-ZONE_ID = os.environ.get("CLOUDFLARE_ZONE_ID")
-DNS_RECORD_ID =os.environ.get("CLOUDFLARE_DNS_RECORD_ID")
-REQUEST_TIMEOUT_S = 20
+ZONE_ID = os.environ.get('CLOUDFLARE_ZONE_ID')
+DNS_RECORD_ID =os.environ.get('CLOUDFLARE_DNS_RECORD_ID')
 
 
 client = Cloudflare(
-    api_email=os.environ.get("CLOUDFLARE_EMAIL"),
-    api_key=os.environ.get("CLOUDFLARE_API_KEY"),
-    api_token=os.environ.get("CLOUDFLARE_API_TOKEN"),
+    api_email=os.environ.get('CLOUDFLARE_EMAIL'),
+    api_key=os.environ.get('CLOUDFLARE_API_KEY'),
+    api_token=os.environ.get('CLOUDFLARE_API_TOKEN'),
 )
 
 log = logging.getLogger('cloudflare_ddns_updater')
@@ -30,14 +30,24 @@ try:
 
     # requesting new ip
     if old_ip_response.type == 'A':
-        new_ip_response = requests.get('https://api.ipify.org', timeout=REQUEST_TIMEOUT_S)
+        fritz_status = FritzStatus(
+            address=os.getenv('FRITZBOX_ADDRESS')
+        )
+        new_ip = fritz_status.external_ip
     elif old_ip_response.type == 'AAAA':
-        new_ip_response = requests.get('https://api64.ipify.org', timeout=REQUEST_TIMEOUT_S)
+        new_ip = ''
+        addresses = netifaces.ifaddresses(os.getenv('NETWORK_INTERFACE_NAME'))
+        if netifaces.AF_INET6 in addresses:
+            ipv6_addresses = addresses[netifaces.AF_INET6]
+            # Filter out link-local addresses (starts with 'fe80')
+            for ipv6_info in ipv6_addresses:
+                if 'addr' in ipv6_info and not ipv6_info['addr'].startswith('fe80'):
+                    new_ip = ipv6_info['addr']
+        if new_ip == '':
+            sys.exit(2)
     else:
-        log.error("IP type %s unknown", old_ip_response.type)
+        log.error('IP type %s unknown', old_ip_response.type)
         sys.exit(1)
-
-    new_ip = new_ip_response.text
 
     # check if the old ip is different to the new ip and edit the dns record accordingly
     if old_ip_response.content != new_ip:
